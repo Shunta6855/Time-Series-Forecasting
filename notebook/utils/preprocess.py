@@ -125,8 +125,7 @@ class DataWindow():
                 label_col_index = plot_col_index
 
             if label_col_index is None:
-                continue
-
+                continue 
             plt.scatter(self.label_indices, labels[n, :, label_col_index].detach().numpy(),
                         edgecolors='k', marker='s', label='Labels', c='green', s=64)
             

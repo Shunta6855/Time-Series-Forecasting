@@ -94,10 +94,80 @@ class LSTMModel(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dim: int=32) -> None:
         super(LSTMModel, self).__init__()
         self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+            # batch_first=True: 入力テンソルの最初の次元がbatch_sizeであることを示す
+                # デフォルトでは、LSTMの入力テンソルは次の順序を想定している
+                    # (sequence_length, batch_size, input_size)
         self.fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, _ = self.lstm(x)
+            # _の部分には、(hn, cn)が渡される
+                # hn: 最終の隠れ状態
+                # cn: 最終のメモリセル
+        return self.fc(x)
+
+class CNNModel(nn.Module):
+    """
+    CNNモデル
+
+    Args:
+        input_dim(int): 入力特徴量の次元
+        output_dim(int): 出力特徴量の次元
+        kernel_size(int): 畳み込みカーネルのサイズ
+    """
+    def __init__(self, input_dim: int, output_dim: int, kernel_size: int=3) ->None:
+        super(CNNModel, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=input_dim, out_channels=32, kernel_size=kernel_size)
+        self.relu = nn.ReLU()
+        self.fc1 = nn.Linear(32, 32)
+        self.fc2 = nn.Linear(32, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.permute(0, 2, 1)
+            # (バッチサイズ, 時系列長, 特徴量数)を入力としている
+            # しかし、畳み込み演算は畳み込みの対象を最終次元に期待しているため、変換の必要がある
+            # Kerasの Conv1D は、(batch_size, time_steps, features) の形式で入力されることを前提
+            # → 次元順序の変換は不要
+        x = self.conv1(x) 
+        x = self.relu(x)
+        x = x.permute(0, 2, 1)
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+class CNNLSTMModel(nn.Module):
+    """
+    CNN + LSTMモデル
+
+    Args:
+        input_dim(int): 入力特徴量の次元数
+        output_dim(int): 出力特徴量の次元数
+        kernel_size(int): 畳み込みカーネルのサイズ
+        hidden_dim(int): LSTM隠れ層のユニット層
+    """
+    def __init__(
+            self, 
+            input_dim: int, 
+            output_dim: int, 
+            kernel_size: int = 3, 
+            hidden_dim: int = 32
+    ) -> None:
+        super(CNNLSTMModel, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=input_dim, out_channels=32, kernel_size=kernel_size)
+        self.relu = nn.ReLU()
+        self.lstm1 = nn.LSTM(32, hidden_dim, batch_first=True)
+        self.lstm2 = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.permute(0, 2, 1) 
+            # (バッチサイズ, 時系列長, 特徴量数) → (バッチサイズ, 特徴量数, 時系列長)
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = x.permute(0, 2, 1)
+            # (バッチサイズ, 特徴量数, 時系列長) → (バッチサイズ, 時系列長, 特徴量数)
+        x, _ = self.lstm1(x)
+        x, _ = self.lstm2(x)
         return self.fc(x)
 
 class ModelTrainer:
