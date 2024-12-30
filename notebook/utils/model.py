@@ -82,6 +82,24 @@ class DenseModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
+class LSTMModel(nn.Module):
+    """
+    LSTMモデル
+
+    Args:
+        input_dim(int): 入力特徴量の次元数
+        output_dim(int): 出力特徴量の次元数
+        hidden_dim(int): LSTMの隠れ層のユニット数
+    """
+    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int=32) -> None:
+        super(LSTMModel, self).__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x, _ = self.lstm(x)
+        return self.fc(x)
+
 class ModelTrainer:
     """
     モデルのトレーニングと検証を実行するためのクラス
@@ -109,6 +127,7 @@ class ModelTrainer:
         self.criterion = criterion
         self.optimizer = optimizer
         self.device = device
+        
     def train(self, max_epochs: int = 50, patience: int = 3) -> Dict[str, List[float]]:
         """
         Early Stoppingを用いたモデルのトレーニング
