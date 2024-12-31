@@ -169,6 +169,80 @@ class CNNLSTMModel(nn.Module):
         x, _ = self.lstm1(x)
         x, _ = self.lstm2(x)
         return self.fc(x)
+    
+class AutoRegressive(nn.Module):
+    """
+    LSTMを用いたAutoRegressiveモデル
+
+    Args:
+        units(int): LSTMの隠れ層ユニット数
+        out_steps(int): 出力ステップ数
+        input_dim(int): 入力特徴量の次元
+    """
+    def __init__(self, units: int, out_steps: int, input_dim: int):
+        super(AutoRegressive, self).__init__()
+        self.out_steps = out_steps
+        self.units = units
+        self.lstm_cell = nn.LSTMCell(input_dim, units)
+        self.dense = nn.Linear(units, input_dim)
+
+    def warmup(self, inputs: torch.Tensor) -> tuple:
+        """
+        最初のステップでLSTMの初期状態と出力を取得する関数
+
+        Args:
+            inputs(torch.Tensor): 入力テンソルのシーケンス
+
+        Returns:
+            tuple: 初期予測値と状態
+        """
+        h, c = self.init_hidden_state(inputs.size(0))
+            # inputs.size(0): 最初の次元のサイズ(batch_size)を取得
+        x = inputs[:, -1, :] # 最後のタイムステップを使用
+        h, c = self.lstm_cell(x, (h, c))
+            # LSTMCellは1ステップごとに計算を行うセル単位のLSTM
+            # → LSTMCellにおけるh(隠れ状態)はLSTMのoutputに相当する
+        prediction = self.dense(h)
+        return prediction, (h, c)
+    
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        モデルの順伝播処理
+
+        Args:
+            inputs(torch.Tensor): 入力テンソルのシーケンス
+
+        Returns:
+            torch.Tensor: 予測結果
+        """
+        predictions = []
+        prediction, state = self.warmup(inputs)
+        predictions.append(prediction)
+
+        for _ in range(1, self.out_steps):
+            x = prediction
+            h, c = self.lstm_cell(x, state)
+            prediction = self.dense(h)
+            predictions.append(prediction)
+            state = (h, c)
+
+        predictions = torch.stack(predictions, dim=1)
+            # 次元1に沿ってスタック(連結)することにより、次元1をout_stepsの次元にできる
+        return predictions # (batch_size, out_steps, input_dim)
+
+    def init_hidden_state(self, batch_size: int) -> tuple:
+        """
+        初期状態の生成
+
+        Args:
+            batch_size(int): バッチサイズ
+
+        Returns:
+            tuple: 隠れ状態(h)とセル状態(c)
+        """
+        h = torch.zeros(batch_size, self.units)
+        c = torch.zeros(batch_size, self.units)
+        return h, c
 
 class ModelTrainer:
     """
